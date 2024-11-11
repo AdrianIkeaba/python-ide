@@ -1,4 +1,5 @@
 import os
+import subprocess
 import sys
 
 from operator import index
@@ -6,15 +7,14 @@ from PyQt5.QtWidgets import *
 from PyQt5.Qt import *
 from PyQt5.Qsci import *
 from pathlib import Path
-import keyword
-import pkgutil
+from editor import Editor
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super(QMainWindow, self).__init__()
         self.init_ui()
-
         self.current_file = None
+        self.output_dock = None
 
     def init_ui(self):
         self.setWindowTitle("Python IDE")
@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
 
         self.setStyleSheet(open("/Users/adrianikeaba/PycharmProjects/python-ide/src/css/style.qss", "r").read())
 
-        self.window_font = QFont("Fira Code")
+        self.window_font = QFont("JetBrains Mono")
         self.window_font.setPointSize(12)
         self.setFont(self.window_font)
 
@@ -34,61 +34,7 @@ class MainWindow(QMainWindow):
         self.show()
 
     def get_editor(self) -> QsciScintilla:
-
-        editor = QsciScintilla()
-        editor.setUtf8(True)
-        editor.setFont(self.window_font)
-
-        #Match braces
-        editor.setBraceMatching(QsciScintilla.SloppyBraceMatch)
-
-        #Identation
-        editor.setIndentationGuides(True)
-        editor.setTabWidth(4)
-        editor.setIndentationsUseTabs(False)
-        editor.setAutoIndent(True)
-
-        #Autocomplete
-        editor.setAutoCompletionSource(QsciScintilla.AcsAll)
-        editor.setAutoCompletionThreshold(1)
-        editor.setAutoCompletionCaseSensitivity(False)
-        editor.setAutoCompletionUseSingle(QsciScintilla.AcusNever)
-
-        #Caret
-        editor.setCaretLineVisible(True)
-        editor.setCaretWidth(2)
-        editor.setCaretLineBackgroundColor(QColor("#2c313c"))
-
-        # EOL
-        editor.setEolMode(QsciScintilla.EolMac) # Change to EolUnix for Linux
-        editor.setEolVisibility(False)
-
-        #Lexer TODO: Add lexer
-        self.pylexer = QsciLexerPython()
-        self.pylexer.setDefaultFont(self.window_font)
-        editor.setLexer(self.pylexer)
-
-        # Api (you can add autocomplete)
-        self.api = QsciAPIs(self.pylexer)
-        for key in keyword.kwlist + dir(__builtins__):
-            self.api.add(key)
-
-        for _, name, _ in pkgutil.iter_modules():
-            self.api.add(name)
-
-        # For testing
-        self.api.add("addition(a: int, b: int)")
-
-        self.api.prepare()
-
-        editor.setLexer(self.pylexer)
-
-        #Line numbers
-        editor.setMarginType(0, QsciScintilla.NumberMargin)
-        editor.setMarginWidth(0, "00000")
-        editor.setMarginsForegroundColor(QColor("#ff888888"))
-        editor.setMarginsBackgroundColor(QColor("#282c34"))
-
+        editor = Editor(self)
 
         return editor
 
@@ -157,6 +103,11 @@ class MainWindow(QMainWindow):
         save_as.setShortcut("Ctrl+Shift+S")
         save_as.triggered.connect(self.save_as)
 
+        run_menu = self.menuBar().addMenu("Run")
+        run_action = run_menu.addAction("Run")
+        run_action.setShortcut("Ctrl+R")
+        run_action.triggered.connect(self.run_script)
+
 
         edit_menu = menu_bar.addMenu("Edit")
 
@@ -164,6 +115,13 @@ class MainWindow(QMainWindow):
         copy_action.setShortcut("Ctrl+C")
         copy_action.triggered.connect(self.copy)
 
+    def get_side_bar_label(self, path, name):
+        label = QLabel()
+        label.setPixmap(QPixmap(path).scaled(24, 24))
+        label.setAlignment(Qt.AlignmentFlag.AlignTop)
+        label.setFont(self.window_font)
+        label.mousePressEvent = lambda e: self.show_hide_tab(e, name)
+        return label
 
     def set_up_body(self):
         body_frame = QFrame()
@@ -190,11 +148,7 @@ class MainWindow(QMainWindow):
         side_bar_layout.setAlignment(Qt.AlignTop | Qt.AlignCenter)
 
         # Setup labels
-        folder_label = QLabel()
-        folder_label.setPixmap(QPixmap("/Users/adrianikeaba/PycharmProjects/python-ide/src/icons/folder.svg").scaled(25, 25))
-        folder_label.setAlignment(Qt.AlignmentFlag.AlignTop)
-        folder_label.setFont(self.window_font)
-        folder_label.mousePressEvent = self.show_hide_tab
+        folder_label = self.get_side_bar_label("/Users/adrianikeaba/PycharmProjects/python-ide/src/icons/folder.svg", "folder")
         side_bar_layout.addWidget(folder_label)
         self.side_bar.setLayout(side_bar_layout)
 
@@ -234,7 +188,7 @@ class MainWindow(QMainWindow):
         self.model.setFilter(QDir.NoDotAndDotDot | QDir.AllDirs | QDir.Files)
 
         self.tree_view = QTreeView()
-        self.tree_view.setFont(QFont("Fira Code", 13))
+        self.tree_view.setFont(QFont("JetBrains Mono", 13))
         self.tree_view.setModel(self.model)
         self.tree_view.setRootIndex(self.model.index(os.getcwd()))
         self.tree_view.setSelectionMode(QTreeView.SingleSelection)
@@ -276,12 +230,15 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(body_frame)
 
 
-    def close_tab(self, index):
-        self.tab_view.removeTab(index)
+    def close_tab(self, idx):
+        self.tab_view.removeTab(idx)
 
 
-    def show_hide_tab(self):
-        pass
+    def show_hide_tab(self, e, type) :
+        if self.tree_frame.isHidden():
+            self.tree_frame.show()
+        else:
+            self.tree_frame.hide()
 
 
     def tree_view_context_menu(self, pos):
@@ -345,10 +302,84 @@ class MainWindow(QMainWindow):
             self.tree_view.setRootIndex(self.model.index(new_folder))
             self.statusBar().showMessage(f"Opened {new_folder}", 2000)
 
+    def create_output_dock(self):
+        # Create output dock if it doesn't exist
+        if self.output_dock is None:
+            # Create dock widget
+            self.output_dock = QDockWidget("Output", self)
+            self.output_dock.setAllowedAreas(Qt.BottomDockWidgetArea)
+
+            # Create text area for output
+            self.output_text = QPlainTextEdit()
+            self.output_text.setReadOnly(True)
+
+            # Set a monospaced font
+            font = QFont("Courier New", 10)
+            self.output_text.setFont(font)
+
+            # Add text area to dock
+            self.output_dock.setWidget(self.output_text)
+
+            # Add dock to main window
+            self.addDockWidget(Qt.BottomDockWidgetArea, self.output_dock)
+
+            # Initially hide the dock
+            self.output_dock.hide()
+
     def copy(self):
         editor = self.tab_view.currentWidget()
         if editor is not None:
             editor.copy()
+
+    def run_script(self):
+        # Check if current file is saved
+        if self.current_file is None:
+            # Prompt to save first
+            save_dialog = QMessageBox.question(self, "Save File",
+                                               "File must be saved before running. Do you want to save?",
+                                               QMessageBox.Yes | QMessageBox.No)
+            if save_dialog == QMessageBox.Yes:
+                self.save_as()
+            else:
+                return
+
+        # Ensure file is saved
+        if self.current_file is None:
+            return
+
+        # Create output dock if it doesn't exist
+        self.create_output_dock()
+
+        try:
+            # Run the script and capture output
+            process = subprocess.Popen(
+                ['python3', str(self.current_file)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True
+            )
+
+            # Read output
+            stdout, stderr = process.communicate()
+
+            # Clear previous output
+            self.output_text.clear()
+
+            # Display output
+            if stdout:
+                self.output_text.setPlainText(stdout)
+
+            # Display errors if any
+            if stderr:
+                self.output_text.setPlainText(stderr)
+
+            # Show the dock
+            self.output_dock.show()
+
+        except Exception as e:
+            # Handle any execution errors
+            self.output_text.setPlainText(f"Error running script: {str(e)}")
+            self.output_dock.show()
 
 
 
