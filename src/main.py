@@ -2,8 +2,6 @@ import os
 import subprocess
 import sys
 
-from operator import index
-from PyQt5.QtWidgets import *
 from PyQt5.Qt import *
 from PyQt5.Qsci import *
 from pathlib import Path
@@ -35,13 +33,13 @@ class MainWindow(QMainWindow):
 
     def get_editor(self) -> QsciScintilla:
         editor = Editor(self)
+        editor.setUtf8(True)
 
         return editor
 
     def is_binary(self, path):
         with open(path, "rb") as f:
             return b'\0' in f.read(1024)
-
 
 
     def set_new_tab(self, path: Path, is_new_file=False):
@@ -313,9 +311,18 @@ class MainWindow(QMainWindow):
             self.output_text = QPlainTextEdit()
             self.output_text.setReadOnly(True)
 
-            # Set a monospaced font
-            font = QFont("Courier New", 10)
+            # Set font and stylesheet for the output dock to match the theme
+            font = QFont("JetBrains Mono", 12)
             self.output_text.setFont(font)
+            self.output_text.setStyleSheet('''
+                QPlainTextEdit {
+                    background-color: #1e1f21;
+                    color: #D3E3D3;
+                    border: 1px solid #282c34;
+                    padding: 5px;
+                    selection-background-color: #3E4451;
+                }
+            ''')
 
             # Add text area to dock
             self.output_dock.setWidget(self.output_text)
@@ -353,7 +360,7 @@ class MainWindow(QMainWindow):
         try:
             # Run the script and capture output
             process = subprocess.Popen(
-                ['python3', str(self.current_file)],
+                ['pythonf', str(self.current_file)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 universal_newlines=True

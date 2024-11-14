@@ -12,7 +12,7 @@ DefaultConfig = dict[str, str, tuple[str, int]]
 
 
 class NeutronLexer(QsciLexerCustom):
-    """Base Custo Lexer class for all language"""
+    """Base Custom Lexer class for all language"""
 
     def __init__(self, language_name, editor, theme=None, defaults: DefaultConfig = None):
         super(NeutronLexer, self).__init__(editor)
